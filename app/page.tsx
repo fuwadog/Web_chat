@@ -120,29 +120,23 @@ export default function ChatPage() {
     }
   }, [settings.darkMode]);
 
-  // Warn on page close/refresh when API key is set
+  // Clear API key on tab close (sessionStorage auto-clears, but explicit cleanup for reliability)
   useEffect(() => {
-    const handleBeforeUnload = (e: BeforeUnloadEvent) => {
-      if (apiKey) {
-        e.preventDefault();
-        e.returnValue = "Your API key will be removed when you leave this page. Are you sure?";
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "hidden") {
+        sessionStorage.removeItem(API_KEY_STORAGE_KEY);
+        clearSessionApiKey();
       }
     };
-    window.addEventListener("beforeunload", handleBeforeUnload);
-    return () => window.removeEventListener("beforeunload", handleBeforeUnload);
-  }, [apiKey]);
-
-  // Clear API key on unload
-  useEffect(() => {
-    const handleUnload = () => {
+    const handlePageHide = () => {
       sessionStorage.removeItem(API_KEY_STORAGE_KEY);
       clearSessionApiKey();
     };
-    window.addEventListener("pagehide", handleUnload);
-    window.addEventListener("unload", handleUnload);
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+    window.addEventListener("pagehide", handlePageHide);
     return () => {
-      window.removeEventListener("pagehide", handleUnload);
-      window.removeEventListener("unload", handleUnload);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+      window.removeEventListener("pagehide", handlePageHide);
     };
   }, []);
 

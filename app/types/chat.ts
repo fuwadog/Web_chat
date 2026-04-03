@@ -19,7 +19,7 @@ export interface AppSettings {
 }
 
 export const DEFAULT_SETTINGS: AppSettings = {
-  model: 'gemini-2.0-flash',
+  model: 'auto',
   temperature: 0.7,
   darkMode: true,
 };
