@@ -1,13 +1,10 @@
 import { GoogleGenerativeAI } from '@google/generative-ai'
 import { NextRequest, NextResponse } from 'next/server'
 
-
-const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || '')
-
 export async function POST(request: NextRequest) {
   try {
 
-    const { message } = await request.json()
+    const { message, apiKey: userApiKey } = await request.json()
 
 
     if (!message || typeof message !== 'string' || message.trim().length === 0) {
@@ -17,15 +14,16 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    const effectiveApiKey = userApiKey || process.env.GEMINI_API_KEY
 
-    if (!process.env.GEMINI_API_KEY) {
+    if (!effectiveApiKey) {
       return NextResponse.json(
         { error: 'API key not configured' },
         { status: 500 }
       )
     }
 
-
+    const genAI = new GoogleGenerativeAI(effectiveApiKey)
     const model = genAI.getGenerativeModel({ model: 'gemini-3-flash-preview' })
 
 

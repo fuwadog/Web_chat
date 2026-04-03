@@ -1,7 +1,9 @@
 'use client';
 
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useCallback } from 'react';
 import './globals.css';
+
+const API_KEY_STORAGE_KEY = 'gemini_api_key';
 
 type Message = {
   role: 'user' | 'assistant';
@@ -15,8 +17,21 @@ export default function ChatPage() {
   const [loading, setLoading] = useState(false);
   const [isTyping, setIsTyping] = useState(false);
   const [darkMode, setDarkMode] = useState(true);
+  const [apiKey, setApiKey] = useState<string | null>(null);
+  const [showApiKeyModal, setShowApiKeyModal] = useState(false);
+  const [apiKeyInput, setApiKeyInput] = useState('');
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  const apiKeyInputRef = useRef<HTMLInputElement>(null);
+
+  // Check and clear leftover API key on mount
+  useEffect(() => {
+    const leftoverKey = sessionStorage.getItem(API_KEY_STORAGE_KEY);
+    if (leftoverKey) {
+      sessionStorage.removeItem(API_KEY_STORAGE_KEY);
+    }
+    setApiKey(null);
+  }, []);
 
   // Auto-scroll to latest message
   useEffect(() => {
@@ -35,6 +50,50 @@ export default function ChatPage() {
   // Focus input on mount
   useEffect(() => {
     inputRef.current?.focus();
+  }, []);
+
+  // Focus API key input when modal opens
+  useEffect(() => {
+    if (showApiKeyModal) {
+      apiKeyInputRef.current?.focus();
+    }
+  }, [showApiKeyModal]);
+
+  // Warn on page close/refresh
+  useEffect(() => {
+    const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+      if (apiKey) {
+        e.preventDefault();
+        e.returnValue = 'Your API key will be removed when you leave this page. Are you sure?';
+      }
+    };
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    return () => window.removeEventListener('beforeunload', handleBeforeUnload);
+  }, [apiKey]);
+
+  // Clear API key on unload
+  useEffect(() => {
+    const handleUnload = () => {
+      sessionStorage.removeItem(API_KEY_STORAGE_KEY);
+    };
+    window.addEventListener('pagehide', handleUnload);
+    window.addEventListener('unload', handleUnload);
+    return () => {
+      window.removeEventListener('pagehide', handleUnload);
+      window.removeEventListener('unload', handleUnload);
+    };
+  }, []);
+
+  const saveApiKey = useCallback((key: string) => {
+    sessionStorage.setItem(API_KEY_STORAGE_KEY, key);
+    setApiKey(key);
+    setShowApiKeyModal(false);
+    setApiKeyInput('');
+  }, []);
+
+  const removeApiKey = useCallback(() => {
+    sessionStorage.removeItem(API_KEY_STORAGE_KEY);
+    setApiKey(null);
   }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -57,7 +116,7 @@ export default function ChatPage() {
       const response = await fetch('/api/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ message: input.trim() }),
+        body: JSON.stringify({ message: input.trim(), apiKey: apiKey || undefined }),
       });
 
       if (!response.ok) {
@@ -121,6 +180,16 @@ export default function ChatPage() {
           </div>
           
           <div className="header-actions">
+            <button
+              onClick={() => apiKey ? removeApiKey() : setShowApiKeyModal(true)}
+              className={`icon-button api-key-button ${apiKey ? 'api-key-active' : ''}`}
+              title={apiKey ? 'API key set (click to remove)' : 'Set API key'}
+            >
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.777-7.777zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4"/>
+              </svg>
+              {apiKey && <span className="api-key-dot"></span>}
+            </button>
             {messages.length > 0 && (
               <button 
                 onClick={clearChat} 
@@ -266,6 +335,62 @@ export default function ChatPage() {
           Gemini can make mistakes. Check important info.
         </p>
       </footer>
+
+      {/* API Key Modal */}
+      {showApiKeyModal && (
+        <div className="modal-overlay" onClick={() => setShowApiKeyModal(false)}>
+          <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <h2>Enter Gemini API Key</h2>
+              <button
+                onClick={() => setShowApiKeyModal(false)}
+                className="modal-close"
+              >
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <line x1="18" y1="6" x2="6" y2="18"/>
+                  <line x1="6" y1="6" x2="18" y2="18"/>
+                </svg>
+              </button>
+            </div>
+            <div className="modal-body">
+              <p className="modal-description">
+                Your API key is stored only in sessionStorage and will be removed when you close this tab.
+              </p>
+              <input
+                ref={apiKeyInputRef}
+                type="password"
+                value={apiKeyInput}
+                onChange={(e) => setApiKeyInput(e.target.value)}
+                placeholder="Paste your Gemini API key here..."
+                className="api-key-input"
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && apiKeyInput.trim()) {
+                    saveApiKey(apiKeyInput.trim());
+                  }
+                }}
+              />
+              <p className="modal-hint">
+                Get your key at <a href="https://aistudio.google.com/api-keys" target="_blank" rel="noopener noreferrer">Google AI Studio</a>
+              </p>
+            </div>
+            <div className="modal-footer">
+              <button
+                onClick={() => setShowApiKeyModal(false)}
+                className="modal-button modal-button-secondary"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => apiKeyInput.trim() && saveApiKey(apiKeyInput.trim())}
+                disabled={!apiKeyInput.trim()}
+                className="modal-button modal-button-primary"
+              >
+                Save Key
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

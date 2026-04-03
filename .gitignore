@@ -37,3 +37,5 @@ Thumbs.db
 # Optional: local storybook or coverage reports
 coverage/
 storybook-static/
+tsconfig.tsbuildinfo
+personal
