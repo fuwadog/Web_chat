@@ -1,6 +1,6 @@
-'use client';
+"use client";
 
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { AppSettings, AVAILABLE_MODELS } from "../types/chat";
 
 interface SettingsModalProps {
@@ -21,18 +21,16 @@ export default function SettingsModal({
   const [localSettings, setLocalSettings] = useState<AppSettings>(settings);
   const [localApiKey, setLocalApiKey] = useState(apiKey);
 
-  useEffect(() => {
-    setLocalSettings(settings);
-    setLocalApiKey(apiKey);
-  }, [settings, apiKey, isOpen]);
-
   const handleSave = () => {
     onSave(localSettings, localApiKey);
     onClose();
   };
 
-  const handleSettingsChange = (field: keyof AppSettings, value: string | number) => {
-    setLocalSettings(prev => ({...prev, [field]: value}));
+  const handleSettingsChange = (
+    field: keyof AppSettings,
+    value: string | number,
+  ) => {
+    setLocalSettings((prev) => ({ ...prev, [field]: value }));
   };
 
   if (!isOpen) return null;
@@ -43,7 +41,12 @@ export default function SettingsModal({
         <div className="modal-header">
           <h2>Settings</h2>
           <button onClick={onClose} className="modal-close">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <svg
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+            >
               <line x1="18" y1="6" x2="6" y2="18" />
               <line x1="6" y1="6" x2="18" y2="18" />
             </svg>
@@ -59,7 +62,9 @@ export default function SettingsModal({
               placeholder="Enter your Gemini API key"
               className="setting-input"
             />
-            <p className="setting-help">Stored in session storage - cleared when you close the tab</p>
+            <p className="setting-help">
+              Stored in session storage - cleared when you close the tab
+            </p>
           </div>
           <div className="setting-group">
             <label className="setting-label">Model</label>
@@ -76,23 +81,33 @@ export default function SettingsModal({
             </select>
           </div>
           <div className="setting-group">
-            <label className="setting-label">Temperature: {localSettings.temperature}</label>
+            <label className="setting-label">
+              Temperature: {localSettings.temperature}
+            </label>
             <input
               type="range"
               min="0"
               max="2"
               step="0.1"
               value={localSettings.temperature}
-              onChange={(e) => handleSettingsChange("temperature", parseFloat(e.target.value))}
+              onChange={(e) =>
+                handleSettingsChange("temperature", parseFloat(e.target.value))
+              }
               className="setting-range"
             />
           </div>
         </div>
         <div className="modal-footer">
-          <button className="modal-button modal-button-secondary" onClick={onClose}>
+          <button
+            className="modal-button modal-button-secondary"
+            onClick={onClose}
+          >
             Cancel
           </button>
-          <button className="modal-button modal-button-primary" onClick={handleSave}>
+          <button
+            className="modal-button modal-button-primary"
+            onClick={handleSave}
+          >
             Save
           </button>
         </div>
