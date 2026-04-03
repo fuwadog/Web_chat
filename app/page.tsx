@@ -34,7 +34,7 @@ export default function ChatPage() {
     string | null
   >(null);
   const [settings, setSettings] = useState<AppSettings>(DEFAULT_SETTINGS);
-  const [apiKey, setApiKey] = useState('');
+  const [apiKey, setApiKey] = useState("");
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -523,6 +523,7 @@ export default function ChatPage() {
         onToggle={() => setSidebarOpen(!sidebarOpen)}
       />
       <SettingsModal
+        key={settingsModalOpen ? "open" : "closed"}
         isOpen={settingsModalOpen}
         onClose={() => setSettingsModalOpen(false)}
         settings={settings}
