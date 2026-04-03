@@ -1,148 +1,225 @@
-'use client';
+"use client";
 
-import { useState, useRef, useEffect, useCallback } from 'react';
-import './globals.css';
+import { useState, useRef, useEffect, useCallback } from "react";
+import "./globals.css";
+import Sidebar from "./components/Sidebar";
+import SettingsModal from "./components/SettingsModal";
+import {
+  Message,
+  Conversation,
+  AppSettings,
+  DEFAULT_SETTINGS,
+} from "./types/chat";
+import {
+  getConversations,
+  saveConversations,
+  createConversation,
+  generateConversationTitle,
+  getActiveConversationId,
+  getSettings,
+  saveSettings,
+  getSessionApiKey,
+  setSessionApiKey,
+  clearSessionApiKey,
+} from "./lib/storage";
 
-const API_KEY_STORAGE_KEY = 'gemini_api_key';
-
-type Message = {
-  role: 'user' | 'assistant';
-  content: string;
-  timestamp: Date;
-};
+const API_KEY_STORAGE_KEY = "gemini_api_key";
 
 export default function ChatPage() {
   const [messages, setMessages] = useState<Message[]>([]);
-  const [input, setInput] = useState('');
+  const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
   const [isTyping, setIsTyping] = useState(false);
-  const [darkMode, setDarkMode] = useState(true);
-  const [apiKey, setApiKey] = useState<string | null>(null);
-  const [showApiKeyModal, setShowApiKeyModal] = useState(false);
-  const [apiKeyInput, setApiKeyInput] = useState('');
+  const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [settingsModalOpen, setSettingsModalOpen] = useState(false);
+  const [conversations, setConversations] = useState<Conversation[]>([]);
+  const [activeConversationId, setActiveConversationIdState] = useState<
+    string | null
+  >(null);
+  const [settings, setSettings] = useState<AppSettings>(DEFAULT_SETTINGS);
+  const [apiKey, setApiKey] = useState("");
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
-  const apiKeyInputRef = useRef<HTMLInputElement>(null);
 
   // Check and clear leftover API key on mount
   useEffect(() => {
     const leftoverKey = sessionStorage.getItem(API_KEY_STORAGE_KEY);
     if (leftoverKey) {
       sessionStorage.removeItem(API_KEY_STORAGE_KEY);
+      clearSessionApiKey();
     }
-    setApiKey(null);
+    setApiKey("");
   }, []);
+
+  // Load data on mount
+  useEffect(() => {
+    const savedSettings = getSettings();
+    setSettings(savedSettings);
+    const sessionKey = getSessionApiKey();
+    if (sessionKey) {
+      setApiKey(sessionKey);
+    }
+    const savedConvs = getConversations();
+    setConversations(savedConvs);
+    const activeId = getActiveConversationId();
+    if (activeId && savedConvs.find((c) => c.id === activeId)) {
+      setActiveConversationIdState(activeId);
+      const active = savedConvs.find((c) => c.id === activeId);
+      if (active) setMessages(active.messages);
+    } else if (savedConvs.length > 0) {
+      setActiveConversationIdState(savedConvs[0].id);
+      setMessages(savedConvs[0].messages);
+    }
+  }, []);
+
+  // Save conversations when messages change
+  useEffect(() => {
+    if (!activeConversationId) return;
+    if (messages.length === 0) return;
+    setConversations((prevConvs) => {
+      const updatedConvs = prevConvs.map((c) => {
+        if (c.id !== activeConversationId) return c;
+        const newTitle =
+          c.title === "New Chat" &&
+          messages.length > 0 &&
+          messages[0].role === "user"
+            ? generateConversationTitle(messages[0].content)
+            : c.title;
+        return {
+          ...c,
+          title: newTitle,
+          messages: messages.map((m) => ({
+            role: m.role,
+            content: m.content,
+            timestamp: m.timestamp,
+          })),
+          updatedAt: new Date().toISOString(),
+        };
+      });
+      saveConversations(updatedConvs);
+      return updatedConvs;
+    });
+  }, [messages, activeConversationId]);
 
   // Auto-scroll to latest message
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages, isTyping]);
-
-  // Apply dark mode class to body
-  useEffect(() => {
-    if (darkMode) {
-      document.body.classList.add('dark-mode');
-    } else {
-      document.body.classList.remove('dark-mode');
-    }
-  }, [darkMode]);
 
   // Focus input on mount
   useEffect(() => {
     inputRef.current?.focus();
   }, []);
 
-  // Focus API key input when modal opens
+  // Apply dark mode based on settings
   useEffect(() => {
-    if (showApiKeyModal) {
-      apiKeyInputRef.current?.focus();
+    if (settings.darkMode) {
+      document.body.classList.add("dark-mode");
+    } else {
+      document.body.classList.remove("dark-mode");
     }
-  }, [showApiKeyModal]);
+  }, [settings.darkMode]);
 
-  // Warn on page close/refresh
+  // Warn on page close/refresh when API key is set
   useEffect(() => {
     const handleBeforeUnload = (e: BeforeUnloadEvent) => {
       if (apiKey) {
         e.preventDefault();
-        e.returnValue = 'Your API key will be removed when you leave this page. Are you sure?';
+        e.returnValue = "Your API key will be removed when you leave this page. Are you sure?";
       }
     };
-    window.addEventListener('beforeunload', handleBeforeUnload);
-    return () => window.removeEventListener('beforeunload', handleBeforeUnload);
+    window.addEventListener("beforeunload", handleBeforeUnload);
+    return () => window.removeEventListener("beforeunload", handleBeforeUnload);
   }, [apiKey]);
 
   // Clear API key on unload
   useEffect(() => {
     const handleUnload = () => {
       sessionStorage.removeItem(API_KEY_STORAGE_KEY);
+      clearSessionApiKey();
     };
-    window.addEventListener('pagehide', handleUnload);
-    window.addEventListener('unload', handleUnload);
+    window.addEventListener("pagehide", handleUnload);
+    window.addEventListener("unload", handleUnload);
     return () => {
-      window.removeEventListener('pagehide', handleUnload);
-      window.removeEventListener('unload', handleUnload);
+      window.removeEventListener("pagehide", handleUnload);
+      window.removeEventListener("unload", handleUnload);
     };
   }, []);
 
   const saveApiKey = useCallback((key: string) => {
     sessionStorage.setItem(API_KEY_STORAGE_KEY, key);
+    setSessionApiKey(key);
     setApiKey(key);
-    setShowApiKeyModal(false);
-    setApiKeyInput('');
   }, []);
 
   const removeApiKey = useCallback(() => {
     sessionStorage.removeItem(API_KEY_STORAGE_KEY);
-    setApiKey(null);
+    clearSessionApiKey();
+    setApiKey("");
   }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    
     if (!input.trim() || loading) return;
 
+    if (!activeConversationId) {
+      const newConv = createConversation();
+      setConversations((prev) => [newConv, ...prev]);
+      setActiveConversationIdState(newConv.id);
+      setMessages([]);
+    }
+
     const userMessage: Message = {
-      role: 'user',
+      role: "user",
       content: input.trim(),
-      timestamp: new Date(),
+      timestamp: new Date().toISOString(),
     };
 
     setMessages((prev) => [...prev, userMessage]);
-    setInput('');
+    setInput("");
     setLoading(true);
     setIsTyping(true);
 
     try {
-      const response = await fetch('/api/chat', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ message: input.trim(), apiKey: apiKey || undefined }),
+      const response = await fetch("/api/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          message: input.trim(),
+          apiKey,
+          model: settings.model,
+          temperature: settings.temperature,
+        }),
       });
 
       if (!response.ok) {
         const error = await response.json();
-        throw new Error(error.error || 'Failed to get response');
+        throw new Error(error.error || "Failed to get response");
       }
 
       const data = await response.json();
-      
-      // Simulate typing delay for better UX
+
+      if (data.model && settings.model === "auto" && data.model !== "auto") {
+        const newSettings = { ...settings, model: data.model };
+        setSettings(newSettings);
+        saveSettings(newSettings);
+      }
+
       setTimeout(() => {
         setIsTyping(false);
         const assistantMessage: Message = {
-          role: 'assistant',
+          role: "assistant",
           content: data.response,
-          timestamp: new Date(),
+          timestamp: new Date().toISOString(),
         };
         setMessages((prev) => [...prev, assistantMessage]);
       }, 500);
-
     } catch (error) {
       setIsTyping(false);
       const errorMessage: Message = {
-        role: 'assistant',
-        content: error instanceof Error ? error.message : 'An error occurred',
-        timestamp: new Date(),
+        role: "assistant",
+        content: error instanceof Error ? error.message : "An error occurred",
+        timestamp: new Date().toISOString(),
       };
       setMessages((prev) => [...prev, errorMessage]);
     } finally {
@@ -151,26 +228,132 @@ export default function ChatPage() {
   };
 
   const toggleTheme = () => {
-    setDarkMode(!darkMode);
+    const newSettings = { ...settings, darkMode: !settings.darkMode };
+    setSettings(newSettings);
+    saveSettings(newSettings);
   };
 
   const clearChat = () => {
-    if (messages.length > 0 && confirm('Clear all messages?')) {
+    if (messages.length > 0 && confirm("Clear all messages?")) {
       setMessages([]);
+    }
+  };
+
+  const handleNewChat = () => {
+    if (messages.length > 0 && activeConversationId) {
+      const updatedConvs = conversations.map((c) => {
+        if (c.id !== activeConversationId) return c;
+        return {
+          ...c,
+          messages: messages.map((m) => ({
+            role: m.role,
+            content: m.content,
+            timestamp: m.timestamp,
+          })),
+          updatedAt: new Date().toISOString(),
+        };
+      });
+      saveConversations(updatedConvs);
+    }
+    const newConv = createConversation();
+    setConversations((prev) => [newConv, ...prev]);
+    setSidebarOpen(false);
+    setActiveConversationIdState(newConv.id);
+    setMessages([]);
+  };
+
+  const handleSelectConversation = (id: string) => {
+    const conv = conversations.find((c) => c.id === id);
+    if (!conv) return;
+    if (activeConversationId && messages.length > 0) {
+      const updatedConvs = conversations.map((c) => {
+        if (c.id !== activeConversationId) return c;
+        return {
+          ...c,
+          messages: messages.map((m) => ({
+            role: m.role,
+            content: m.content,
+            timestamp: m.timestamp,
+          })),
+          updatedAt: new Date().toISOString(),
+        };
+      });
+      saveConversations(updatedConvs);
+      setConversations(updatedConvs);
+    }
+    setActiveConversationIdState(id);
+    setMessages(conv.messages);
+    setSidebarOpen(false);
+  };
+
+  const handleDeleteConversation = (id: string) => {
+    if (!confirm("Delete this conversation?")) return;
+    const newConvs = conversations.filter((c) => c.id !== id);
+    setConversations(newConvs);
+    saveConversations(newConvs);
+    if (activeConversationId === id) {
+      if (newConvs.length > 0) {
+        setActiveConversationIdState(newConvs[0].id);
+        setMessages(newConvs[0].messages);
+      } else {
+        setActiveConversationIdState(null);
+        setMessages([]);
+      }
+    }
+  };
+
+  const handleSettingsSave = (newSettings: AppSettings, newApiKey: string) => {
+    setSettings(newSettings);
+    saveSettings(newSettings);
+    if (newApiKey) {
+      saveApiKey(newApiKey);
+    } else {
+      removeApiKey();
     }
   };
 
   return (
     <div className="chat-container">
-      {/* Header */}
       <header className="chat-header">
         <div className="header-content">
           <div className="header-left">
+            <button
+              onClick={() => setSidebarOpen(!sidebarOpen)}
+              className="icon-button sidebar-toggle"
+              title="Open sidebar"
+            >
+              <svg
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+              >
+                <path d="M3 12h18M3 6h18M3 18h18" />
+              </svg>
+            </button>
             <div className="gemini-icon">
-              <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                <path d="M12 2L2 7L12 12L22 7L12 2Z" fill="currentColor" fillOpacity="0.8"/>
-                <path d="M2 17L12 22L22 17" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
-                <path d="M2 12L12 17L22 12" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
+              <svg
+                viewBox="0 0 24 24"
+                fill="none"
+                xmlns="http://www.w3.org/2000/svg"
+              >
+                <path
+                  d="M12 2L2 7L12 12L22 7L12 2Z"
+                  fill="currentColor"
+                  fillOpacity="0.8"
+                />
+                <path
+                  d="M2 17L12 22L22 17"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                />
+                <path
+                  d="M2 12L12 17L22 12"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                />
               </svg>
             </div>
             <div>
@@ -178,12 +361,11 @@ export default function ChatPage() {
               <p className="header-subtitle">Powered by Google AI</p>
             </div>
           </div>
-          
           <div className="header-actions">
             <button
-              onClick={() => apiKey ? removeApiKey() : setShowApiKeyModal(true)}
-              className={`icon-button api-key-button ${apiKey ? 'api-key-active' : ''}`}
-              title={apiKey ? 'API key set (click to remove)' : 'Set API key'}
+              onClick={() => apiKey ? removeApiKey() : setSettingsModalOpen(true)}
+              className={`icon-button api-key-button ${apiKey ? "api-key-active" : ""}`}
+              title={apiKey ? "API key set (click to remove)" : "Set API key"}
             >
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                 <path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.777-7.777zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4"/>
@@ -191,85 +373,132 @@ export default function ChatPage() {
               {apiKey && <span className="api-key-dot"></span>}
             </button>
             {messages.length > 0 && (
-              <button 
-                onClick={clearChat} 
+              <button
+                onClick={clearChat}
                 className="icon-button clear-button"
                 title="Clear chat"
               >
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  <path d="M3 6h18M8 6V4a2 2 0 012-2h4a2 2 0 012 2v2m3 0v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6h14z"/>
+                <svg
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                >
+                  <path d="M3 6h18M8 6V4a2 2 0 012-2h4a2 2 0 012 2v2m3 0v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6h14z" />
                 </svg>
               </button>
             )}
-            <button 
-              onClick={toggleTheme} 
+            <button
+              onClick={toggleTheme}
               className="icon-button theme-toggle"
-              title={darkMode ? 'Light mode' : 'Dark mode'}
+              title={settings.darkMode ? "Light mode" : "Dark mode"}
             >
-              {darkMode ? (
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  <circle cx="12" cy="12" r="5"/>
-                  <line x1="12" y1="1" x2="12" y2="3"/>
-                  <line x1="12" y1="21" x2="12" y2="23"/>
-                  <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/>
-                  <line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/>
-                  <line x1="1" y1="12" x2="3" y2="12"/>
-                  <line x1="21" y1="12" x2="23" y2="12"/>
-                  <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/>
-                  <line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/>
+              {settings.darkMode ? (
+                <svg
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                >
+                  <circle cx="12" cy="12" r="5" />
+                  <line x1="12" y1="1" x2="12" y2="3" />
+                  <line x1="12" y1="21" x2="12" y2="23" />
+                  <line x1="4.22" y1="4.22" x2="5.64" y2="5.64" />
+                  <line x1="18.36" y1="18.36" x2="19.78" y2="19.78" />
+                  <line x1="1" y1="12" x2="3" y2="12" />
+                  <line x1="21" y1="12" x2="23" y2="12" />
+                  <line x1="4.22" y1="19.78" x2="5.64" y2="18.36" />
+                  <line x1="18.36" y1="5.64" x2="19.78" y2="4.22" />
                 </svg>
               ) : (
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  <path d="M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79z"/>
+                <svg
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                >
+                  <path d="M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79z" />
                 </svg>
               )}
+            </button>
+            <button
+              onClick={() => setSettingsModalOpen(true)}
+              className="icon-button"
+              title="Settings"
+            >
+              <svg
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+              >
+                <circle cx="12" cy="12" r="3" />
+                <path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-2 2 2 2 0 01-2-2v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83 0 2 2 0 010-2.83l.06-.06a1.65 1.65 0 00.33-1.82 1.65 1.65 0 00-1.51-1H3a2 2 0 01-2-2 2 2 0 012-2h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 010-2.83 2 2 0 012.83 0l.06.06a1.65 1.65 0 001.82.33H9a1.65 1.65 0 001-1.51V3a2 2 0 012-2 2 2 0 012 2v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 0 2 2 0 010 2.83l-.06.06a1.65 1.65 0 00-.33 1.82V9a1.65 1.65 0 001.51 1H21a2 2 0 012 2 2 2 0 01-2 2h-.09a1.65 1.65 0 00-1.51 1z" />
+              </svg>
             </button>
           </div>
         </div>
       </header>
 
-      {/* Messages Area */}
       <main className="messages-container">
         {messages.length === 0 ? (
           <div className="empty-state">
             <div className="empty-icon">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/>
+              <svg
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+              >
+                <path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z" />
               </svg>
             </div>
             <h2>Start a conversation</h2>
-            <p>Ask me anything, and I'll do my best to help.</p>
+            <p>Ask me anything, and I will do my best to help.</p>
           </div>
         ) : (
           <div className="messages-list">
             {messages.map((msg, index) => (
-              <div 
-                key={index} 
-                className={`message message-${msg.role}`}
-                style={{ animationDelay: `${index * 0.05}s` }}
+              <div
+                key={index}
+                className={"message message-" + msg.role}
+                style={{ animationDelay: index * 0.05 + "s" }}
               >
                 <div className="message-avatar">
-                  {msg.role === 'user' ? (
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                      <path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"/>
-                      <circle cx="12" cy="7" r="4"/>
+                  {msg.role === "user" ? (
+                    <svg
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="2"
+                    >
+                      <path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2" />
+                      <circle cx="12" cy="7" r="4" />
                     </svg>
                   ) : (
                     <svg viewBox="0 0 24 24" fill="none">
-                      <path d="M12 2L2 7L12 12L22 7L12 2Z" fill="currentColor" fillOpacity="0.9"/>
-                      <path d="M2 17L12 22L22 17M2 12L12 17L22 12" stroke="currentColor" strokeWidth="2"/>
+                      <path
+                        d="M12 2L2 7L12 12L22 7L12 2Z"
+                        fill="currentColor"
+                        fillOpacity="0.9"
+                      />
+                      <path
+                        d="M2 17L12 22L22 17M2 12L12 17L22 12"
+                        stroke="currentColor"
+                        strokeWidth="2"
+                      />
                     </svg>
                   )}
                 </div>
                 <div className="message-content">
                   <div className="message-header">
                     <span className="message-role">
-                      {msg.role === 'user' ? 'You' : 'Gemini'}
+                      {msg.role === "user" ? "You" : "Gemini"}
                     </span>
                     <span className="message-time">
-                      {msg.timestamp.toLocaleTimeString([], { 
-                        hour: '2-digit', 
-                        minute: '2-digit' 
+                      {new Date(msg.timestamp).toLocaleTimeString([], {
+                        hour: "2-digit",
+                        minute: "2-digit",
                       })}
                     </span>
                   </div>
@@ -277,13 +506,20 @@ export default function ChatPage() {
                 </div>
               </div>
             ))}
-            
             {isTyping && (
               <div className="message message-assistant typing-indicator">
                 <div className="message-avatar">
                   <svg viewBox="0 0 24 24" fill="none">
-                    <path d="M12 2L2 7L12 12L22 7L12 2Z" fill="currentColor" fillOpacity="0.9"/>
-                    <path d="M2 17L12 22L22 17M2 12L12 17L22 12" stroke="currentColor" strokeWidth="2"/>
+                    <path
+                      d="M12 2L2 7L12 12L22 7L12 2Z"
+                      fill="currentColor"
+                      fillOpacity="0.9"
+                    />
+                    <path
+                      d="M2 17L12 22L22 17M2 12L12 17L22 12"
+                      stroke="currentColor"
+                      strokeWidth="2"
+                    />
                   </svg>
                 </div>
                 <div className="message-content">
@@ -295,13 +531,11 @@ export default function ChatPage() {
                 </div>
               </div>
             )}
-            
             <div ref={messagesEndRef} />
           </div>
         )}
       </main>
 
-      {/* Input Area */}
       <footer className="input-container">
         <form onSubmit={handleSubmit} className="input-form">
           <input
@@ -319,14 +553,25 @@ export default function ChatPage() {
             className="send-button"
           >
             {loading ? (
-              <svg className="spinner" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <circle cx="12" cy="12" r="10" opacity="0.25"/>
-                <path d="M12 2a10 10 0 0110 10" strokeLinecap="round"/>
+              <svg
+                className="spinner"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+              >
+                <circle cx="12" cy="12" r="10" opacity="0.25" />
+                <path d="M12 2a10 10 0 0110 10" strokeLinecap="round" />
               </svg>
             ) : (
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <line x1="22" y1="2" x2="11" y2="13"/>
-                <polygon points="22 2 15 22 11 13 2 9 22 2"/>
+              <svg
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+              >
+                <line x1="22" y1="2" x2="11" y2="13" />
+                <polygon points="22 2 15 22 11 13 2 9 22 2" />
               </svg>
             )}
           </button>
@@ -336,61 +581,23 @@ export default function ChatPage() {
         </p>
       </footer>
 
-      {/* API Key Modal */}
-      {showApiKeyModal && (
-        <div className="modal-overlay" onClick={() => setShowApiKeyModal(false)}>
-          <div className="modal-content" onClick={(e) => e.stopPropagation()}>
-            <div className="modal-header">
-              <h2>Enter Gemini API Key</h2>
-              <button
-                onClick={() => setShowApiKeyModal(false)}
-                className="modal-close"
-              >
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  <line x1="18" y1="6" x2="6" y2="18"/>
-                  <line x1="6" y1="6" x2="18" y2="18"/>
-                </svg>
-              </button>
-            </div>
-            <div className="modal-body">
-              <p className="modal-description">
-                Your API key is stored only in sessionStorage and will be removed when you close this tab.
-              </p>
-              <input
-                ref={apiKeyInputRef}
-                type="password"
-                value={apiKeyInput}
-                onChange={(e) => setApiKeyInput(e.target.value)}
-                placeholder="Paste your Gemini API key here..."
-                className="api-key-input"
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter' && apiKeyInput.trim()) {
-                    saveApiKey(apiKeyInput.trim());
-                  }
-                }}
-              />
-              <p className="modal-hint">
-                Get your key at <a href="https://aistudio.google.com/api-keys" target="_blank" rel="noopener noreferrer">Google AI Studio</a>
-              </p>
-            </div>
-            <div className="modal-footer">
-              <button
-                onClick={() => setShowApiKeyModal(false)}
-                className="modal-button modal-button-secondary"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={() => apiKeyInput.trim() && saveApiKey(apiKeyInput.trim())}
-                disabled={!apiKeyInput.trim()}
-                className="modal-button modal-button-primary"
-              >
-                Save Key
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      <Sidebar
+        conversations={conversations}
+        activeConversationId={activeConversationId}
+        onSelectConversation={handleSelectConversation}
+        onNewChat={handleNewChat}
+        onDeleteConversation={handleDeleteConversation}
+        isOpen={sidebarOpen}
+        onToggle={() => setSidebarOpen(!sidebarOpen)}
+      />
+      <SettingsModal
+        key={settingsModalOpen ? "open" : "closed"}
+        isOpen={settingsModalOpen}
+        onClose={() => setSettingsModalOpen(false)}
+        settings={settings}
+        apiKey={apiKey}
+        onSave={handleSettingsSave}
+      />
     </div>
   );
 }

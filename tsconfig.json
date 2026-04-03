@@ -38,6 +38,9 @@
   ],
   "exclude": [
     "node_modules",
-    "personal"
+    "personal",
+    "ui-ux-pro-max-skill",
+    "expert-code-reviewer",
+    "full-stack-developer"
   ]
 }

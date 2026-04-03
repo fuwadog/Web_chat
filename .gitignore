@@ -6,6 +6,7 @@ node_modules/
 .env.local
 .env.development.local
 .env.test.local
+.env.example.backup
 .env.production.local
 
 # Next.js build output
@@ -34,8 +35,26 @@ Thumbs.db
 *.njsproj
 *.sln
 
+# TypeScript build artifacts
+*.tsbuildinfo
+
+# AI agent skill directories (not part of the app)
+expert-code-reviewer/
+full-stack-developer/
+ui-ux-pro-max-skill/
+.agents/
+.claude/
+
 # Optional: local storybook or coverage reports
 coverage/
 storybook-static/
 tsconfig.tsbuildinfo
-personal
+personal/
+
+# Temporary/helper files
+css_helper.js
+css_part1.js
+test-api-key.js
+
+# Empty directories
+div/
