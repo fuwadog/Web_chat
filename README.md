@@ -10,7 +10,7 @@ A **simple AI chat application** built with **Next.js** and **Google Gemini AI**
 
 ## 🌐 Demo
 
-Try it live: **https://web-chat-phi-amber.vercel.app/**
+Try it live: **https://web-chat-ruddy.vercel.app/**
 
 ---
 
@@ -91,7 +91,7 @@ Web_chat/
 1. **Clone the repository**
 
    ```bash
-   git clone https://github.com/your-username/Web_chat.git
+   git clone https://github.com/fuwadog/Web_chat.git
    cd Web_chat
    ```
 
@@ -163,8 +163,7 @@ Sends a message to the Gemini API and returns the AI response.
 
 **Error responses:**
 
-| Status | Description |
-|--------|-------------|
-| 400    | Message is required or invalid |
+| Status | Description                                                 |
+| ------ | ----------------------------------------------------------- |
+| 400    | Message is required or invalid                              |
 | 500    | API key not configured, quota exceeded, or Gemini API error |
-
