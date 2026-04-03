@@ -39,9 +39,6 @@ Thumbs.db
 *.tsbuildinfo
 
 # AI agent skill directories (not part of the app)
-expert-code-reviewer/
-full-stack-developer/
-ui-ux-pro-max-skill/
 .agents/
 .claude/
 

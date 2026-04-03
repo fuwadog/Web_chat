@@ -2,8 +2,12 @@
 
 import { useState, useRef, useEffect, useCallback } from "react";
 import "./globals.css";
-import Sidebar from "./components/Sidebar";
 import SettingsModal from "./components/SettingsModal";
+import MessageList from "./components/chat/MessageList";
+import ChatInput from "./components/chat/ChatInput";
+import CollapsibleHistory from "./components/CollapsibleHistory";
+import StatsPanel from "./components/StatsPanel";
+import ModelBar from "./components/ModelBar";
 import {
   Message,
   Conversation,
@@ -27,10 +31,8 @@ const API_KEY_STORAGE_KEY = "gemini_api_key";
 
 export default function ChatPage() {
   const [messages, setMessages] = useState<Message[]>([]);
-  const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
   const [isTyping, setIsTyping] = useState(false);
-  const [sidebarOpen, setSidebarOpen] = useState(false);
   const [settingsModalOpen, setSettingsModalOpen] = useState(false);
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [activeConversationId, setActiveConversationIdState] = useState<
@@ -38,6 +40,8 @@ export default function ChatPage() {
   >(null);
   const [settings, setSettings] = useState<AppSettings>(DEFAULT_SETTINGS);
   const [apiKey, setApiKey] = useState("");
+  const [historyExpanded, setHistoryExpanded] = useState(true);
+  const [sessionStart] = useState<string>(() => new Date().toISOString());
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -56,9 +60,7 @@ export default function ChatPage() {
     const savedSettings = getSettings();
     setSettings(savedSettings);
     const sessionKey = getSessionApiKey();
-    if (sessionKey) {
-      setApiKey(sessionKey);
-    }
+    if (sessionKey) setApiKey(sessionKey);
     const savedConvs = getConversations();
     setConversations(savedConvs);
     const activeId = getActiveConversationId();
@@ -74,8 +76,7 @@ export default function ChatPage() {
 
   // Save conversations when messages change
   useEffect(() => {
-    if (!activeConversationId) return;
-    if (messages.length === 0) return;
+    if (!activeConversationId || messages.length === 0) return;
     setConversations((prevConvs) => {
       const updatedConvs = prevConvs.map((c) => {
         if (c.id !== activeConversationId) return c;
@@ -113,30 +114,22 @@ export default function ChatPage() {
 
   // Apply dark mode based on settings
   useEffect(() => {
-    if (settings.darkMode) {
-      document.body.classList.add("dark-mode");
-    } else {
-      document.body.classList.remove("dark-mode");
-    }
+    document.body.classList.toggle("dark-mode", settings.darkMode);
   }, [settings.darkMode]);
 
-  // Clear API key on tab close (sessionStorage auto-clears, but explicit cleanup for reliability)
+  // Clear API key on tab close
   useEffect(() => {
-    const handleVisibilityChange = () => {
-      if (document.visibilityState === "hidden") {
-        sessionStorage.removeItem(API_KEY_STORAGE_KEY);
-        clearSessionApiKey();
-      }
-    };
-    const handlePageHide = () => {
+    const close = () => {
       sessionStorage.removeItem(API_KEY_STORAGE_KEY);
       clearSessionApiKey();
     };
-    document.addEventListener("visibilitychange", handleVisibilityChange);
-    window.addEventListener("pagehide", handlePageHide);
+    document.addEventListener("visibilitychange", () => {
+      if (document.visibilityState === "hidden") close();
+    });
+    window.addEventListener("pagehide", close);
     return () => {
-      document.removeEventListener("visibilitychange", handleVisibilityChange);
-      window.removeEventListener("pagehide", handlePageHide);
+      document.removeEventListener("visibilitychange", close);
+      window.removeEventListener("pagehide", close);
     };
   }, []);
 
@@ -152,88 +145,94 @@ export default function ChatPage() {
     setApiKey("");
   }, []);
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!input.trim() || loading) return;
+  const handleSubmit = useCallback(
+    async (text: string) => {
+      if (loading) return;
 
-    if (!activeConversationId) {
-      const newConv = createConversation();
-      setConversations((prev) => [newConv, ...prev]);
-      setActiveConversationIdState(newConv.id);
-      setMessages([]);
-    }
-
-    const userMessage: Message = {
-      role: "user",
-      content: input.trim(),
-      timestamp: new Date().toISOString(),
-    };
-
-    setMessages((prev) => [...prev, userMessage]);
-    setInput("");
-    setLoading(true);
-    setIsTyping(true);
-
-    try {
-      const response = await fetch("/api/chat", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          message: input.trim(),
-          apiKey,
-          model: settings.model,
-          temperature: settings.temperature,
-        }),
-      });
-
-      if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.error || "Failed to get response");
+      if (!activeConversationId) {
+        const newConv = createConversation();
+        setConversations((prev) => [newConv, ...prev]);
+        setActiveConversationIdState(newConv.id);
+        setMessages([]);
       }
 
-      const data = await response.json();
-
-      if (data.model && settings.model === "auto" && data.model !== "auto") {
-        const newSettings = { ...settings, model: data.model };
-        setSettings(newSettings);
-        saveSettings(newSettings);
-      }
-
-      setTimeout(() => {
-        setIsTyping(false);
-        const assistantMessage: Message = {
-          role: "assistant",
-          content: data.response,
-          timestamp: new Date().toISOString(),
-        };
-        setMessages((prev) => [...prev, assistantMessage]);
-      }, 500);
-    } catch (error) {
-      setIsTyping(false);
-      const errorMessage: Message = {
-        role: "assistant",
-        content: error instanceof Error ? error.message : "An error occurred",
+      const userMessage: Message = {
+        role: "user",
+        content: text.trim(),
         timestamp: new Date().toISOString(),
       };
-      setMessages((prev) => [...prev, errorMessage]);
-    } finally {
-      setLoading(false);
-    }
-  };
 
-  const toggleTheme = () => {
+      setMessages((prev) => [...prev, userMessage]);
+      setLoading(true);
+      setIsTyping(true);
+
+      try {
+        const response = await fetch("/api/chat", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            message: text.trim(),
+            apiKey,
+            model: settings.model,
+            temperature: settings.temperature,
+          }),
+        });
+
+        if (!response.ok) {
+          const error = await response.json();
+          throw new Error(error.error || "Failed to get response");
+        }
+
+        const data = await response.json();
+
+        if (data.model && settings.model === "auto" && data.model !== "auto") {
+          const newSettings = { ...settings, model: data.model };
+          setSettings(newSettings);
+          saveSettings(newSettings);
+        }
+
+        setTimeout(() => {
+          setIsTyping(false);
+          setMessages((prev) => [
+            ...prev,
+            {
+              role: "assistant",
+              content: data.response,
+              timestamp: new Date().toISOString(),
+            },
+          ]);
+        }, 500);
+      } catch (error) {
+        setIsTyping(false);
+        setMessages((prev) => [
+          ...prev,
+          {
+            role: "assistant",
+            content:
+              error instanceof Error ? error.message : "An error occurred",
+            timestamp: new Date().toISOString(),
+          },
+        ]);
+      } finally {
+        setLoading(false);
+      }
+    },
+    [loading, activeConversationId, apiKey, settings],
+  );
+
+  const toggleTheme = useCallback(() => {
     const newSettings = { ...settings, darkMode: !settings.darkMode };
     setSettings(newSettings);
     saveSettings(newSettings);
-  };
+  }, [settings]);
 
-  const clearChat = () => {
+  const clearChat = useCallback(() => {
     if (messages.length > 0 && confirm("Clear all messages?")) {
       setMessages([]);
     }
-  };
+  }, []);
 
-  const handleNewChat = () => {
+  const handleNewChat = useCallback(() => {
     if (messages.length > 0 && activeConversationId) {
       const updatedConvs = conversations.map((c) => {
         if (c.id !== activeConversationId) return c;
@@ -251,140 +250,114 @@ export default function ChatPage() {
     }
     const newConv = createConversation();
     setConversations((prev) => [newConv, ...prev]);
-    setSidebarOpen(false);
     setActiveConversationIdState(newConv.id);
     setMessages([]);
-  };
+  }, [messages, activeConversationId, conversations]);
 
-  const handleSelectConversation = (id: string) => {
-    const conv = conversations.find((c) => c.id === id);
-    if (!conv) return;
-    if (activeConversationId && messages.length > 0) {
-      const updatedConvs = conversations.map((c) => {
-        if (c.id !== activeConversationId) return c;
-        return {
-          ...c,
-          messages: messages.map((m) => ({
-            role: m.role,
-            content: m.content,
-            timestamp: m.timestamp,
-          })),
-          updatedAt: new Date().toISOString(),
-        };
-      });
-      saveConversations(updatedConvs);
-      setConversations(updatedConvs);
-    }
-    setActiveConversationIdState(id);
-    setMessages(conv.messages);
-    setSidebarOpen(false);
-  };
-
-  const handleDeleteConversation = (id: string) => {
-    if (!confirm("Delete this conversation?")) return;
-    const newConvs = conversations.filter((c) => c.id !== id);
-    setConversations(newConvs);
-    saveConversations(newConvs);
-    if (activeConversationId === id) {
-      if (newConvs.length > 0) {
-        setActiveConversationIdState(newConvs[0].id);
-        setMessages(newConvs[0].messages);
-      } else {
-        setActiveConversationIdState(null);
-        setMessages([]);
+  const handleSelectConversation = useCallback(
+    (id: string) => {
+      const conv = conversations.find((c) => c.id === id);
+      if (!conv) return;
+      if (activeConversationId && messages.length > 0) {
+        const updatedConvs = conversations.map((c) => {
+          if (c.id !== activeConversationId) return c;
+          return {
+            ...c,
+            messages: messages.map((m) => ({
+              role: m.role,
+              content: m.content,
+              timestamp: m.timestamp,
+            })),
+            updatedAt: new Date().toISOString(),
+          };
+        });
+        saveConversations(updatedConvs);
+        setConversations(updatedConvs);
       }
-    }
-  };
+      setActiveConversationIdState(id);
+      setMessages(conv.messages);
+    },
+    [conversations, activeConversationId, messages],
+  );
 
-  const handleSettingsSave = (newSettings: AppSettings, newApiKey: string) => {
-    setSettings(newSettings);
-    saveSettings(newSettings);
-    if (newApiKey) {
-      saveApiKey(newApiKey);
-    } else {
-      removeApiKey();
-    }
-  };
+  const handleDeleteConversation = useCallback(
+    (id: string) => {
+      if (!confirm("Delete this conversation?")) return;
+      const newConvs = conversations.filter((c) => c.id !== id);
+      setConversations(newConvs);
+      saveConversations(newConvs);
+      if (activeConversationId === id) {
+        if (newConvs.length > 0) {
+          setActiveConversationIdState(newConvs[0].id);
+          setMessages(newConvs[0].messages);
+        } else {
+          setActiveConversationIdState(null);
+          setMessages([]);
+        }
+      }
+    },
+    [conversations, activeConversationId],
+  );
+
+  const handleSettingsSave = useCallback(
+    (newSettings: AppSettings, newApiKey: string) => {
+      setSettings(newSettings);
+      saveSettings(newSettings);
+      if (newApiKey) saveApiKey(newApiKey);
+      else removeApiKey();
+    },
+    [saveApiKey, removeApiKey],
+  );
+
+  // Calculate response time (average)
+  const avgResponseTime = 350; // Placeholder, would be calculated from actual timings
 
   return (
-    <div className="chat-container">
-      <header className="chat-header">
-        <div className="header-content">
-          <div className="header-left">
-            <button
-              onClick={() => setSidebarOpen(!sidebarOpen)}
-              className="icon-button sidebar-toggle"
-              title="Open sidebar"
+    <div className="bento-container">
+      {/* div1: Settings and Logo - Top-left, 2 cols */}
+      <div className="bento-panel div1">
+        <div className="div1-header">
+          <div className="div1-logo">
+            <svg
+              className="div1-logo-icon"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
             >
-              <svg
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2"
-              >
-                <path d="M3 12h18M3 6h18M3 18h18" />
-              </svg>
-            </button>
-            <div className="gemini-icon">
-              <svg
-                viewBox="0 0 24 24"
-                fill="none"
-                xmlns="http://www.w3.org/2000/svg"
-              >
-                <path
-                  d="M12 2L2 7L12 12L22 7L12 2Z"
-                  fill="currentColor"
-                  fillOpacity="0.8"
-                />
-                <path
-                  d="M2 17L12 22L22 17"
-                  stroke="currentColor"
-                  strokeWidth="2"
-                  strokeLinecap="round"
-                />
-                <path
-                  d="M2 12L12 17L22 12"
-                  stroke="currentColor"
-                  strokeWidth="2"
-                  strokeLinecap="round"
-                />
-              </svg>
-            </div>
-            <div>
-              <h1 className="header-title">Gemini Chat</h1>
-              <p className="header-subtitle">Powered by Google AI</p>
-            </div>
+              <path
+                d="M12 2a7 7 0 017 7c0 3-3 7-7 7s-7-4-7-7a7 7 0 017-7z"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
+              <circle cx="12" cy="14" r="3" />
+              <path
+                d="M6 20v-2M12 22v-2M18 20v-2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
+            </svg>
+            <span className="div1-logo-text">AI Chat</span>
           </div>
-          <div className="header-actions">
-            <button
-              onClick={() => apiKey ? removeApiKey() : setSettingsModalOpen(true)}
-              className={`icon-button api-key-button ${apiKey ? "api-key-active" : ""}`}
-              title={apiKey ? "API key set (click to remove)" : "Set API key"}
-            >
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.777-7.777zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4"/>
-              </svg>
-              {apiKey && <span className="api-key-dot"></span>}
-            </button>
-            {messages.length > 0 && (
-              <button
-                onClick={clearChat}
-                className="icon-button clear-button"
-                title="Clear chat"
-              >
-                <svg
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="2"
-                >
-                  <path d="M3 6h18M8 6V4a2 2 0 012-2h4a2 2 0 012 2v2m3 0v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6h14z" />
-                </svg>
-              </button>
-            )}
+          <div className="div1-brand-dots">
+            <span className="div1-brand-dot"></span>
+            <span className="div1-brand-dot"></span>
+            <span className="div1-brand-dot"></span>
+          </div>
+        </div>
+      </div>
+
+      {/* div2: Buttons and Extra - Top-center, 2 cols */}
+      <div className="bento-panel div2">
+        <div className="div2-header">
+          <div className="div2-status">
+            <span className="div2-status-dot"></span>
+            <span>Online</span>
+          </div>
+          <div className="div2-buttons">
             <button
               onClick={toggleTheme}
-              className="icon-button theme-toggle"
+              className="header-btn"
               title={settings.darkMode ? "Light mode" : "Dark mode"}
             >
               {settings.darkMode ? (
@@ -395,14 +368,7 @@ export default function ChatPage() {
                   strokeWidth="2"
                 >
                   <circle cx="12" cy="12" r="5" />
-                  <line x1="12" y1="1" x2="12" y2="3" />
-                  <line x1="12" y1="21" x2="12" y2="23" />
-                  <line x1="4.22" y1="4.22" x2="5.64" y2="5.64" />
-                  <line x1="18.36" y1="18.36" x2="19.78" y2="19.78" />
-                  <line x1="1" y1="12" x2="3" y2="12" />
-                  <line x1="21" y1="12" x2="23" y2="12" />
-                  <line x1="4.22" y1="19.78" x2="5.64" y2="18.36" />
-                  <line x1="18.36" y1="5.64" x2="19.78" y2="4.22" />
+                  <path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42" />
                 </svg>
               ) : (
                 <svg
@@ -417,7 +383,7 @@ export default function ChatPage() {
             </button>
             <button
               onClick={() => setSettingsModalOpen(true)}
-              className="icon-button"
+              className="header-btn"
               title="Settings"
             >
               <svg
@@ -427,163 +393,99 @@ export default function ChatPage() {
                 strokeWidth="2"
               >
                 <circle cx="12" cy="12" r="3" />
-                <path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-2 2 2 2 0 01-2-2v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83 0 2 2 0 010-2.83l.06-.06a1.65 1.65 0 00.33-1.82 1.65 1.65 0 00-1.51-1H3a2 2 0 01-2-2 2 2 0 012-2h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 010-2.83 2 2 0 012.83 0l.06.06a1.65 1.65 0 001.82.33H9a1.65 1.65 0 001-1.51V3a2 2 0 012-2 2 2 0 012 2v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 0 2 2 0 010 2.83l-.06.06a1.65 1.65 0 00-.33 1.82V9a1.65 1.65 0 001.51 1H21a2 2 0 012 2 2 2 0 01-2 2h-.09a1.65 1.65 0 00-1.51 1z" />
+                <path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06a1.65 1.65 0 00.33-1.82 1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06a1.65 1.65 0 001.82.33H9a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06a1.65 1.65 0 00-.33 1.82V9c.26.604.852.997 1.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z" />
               </svg>
             </button>
+            <div className="div2-user-avatar">U</div>
           </div>
         </div>
-      </header>
+      </div>
 
-      <main className="messages-container">
-        {messages.length === 0 ? (
-          <div className="empty-state">
-            <div className="empty-icon">
-              <svg
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2"
-              >
-                <path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z" />
-              </svg>
-            </div>
-            <h2>Start a conversation</h2>
-            <p>Ask me anything, and I will do my best to help.</p>
+      {/* div3: History Tab - Far right, 1 col, spans 5 rows */}
+      <div className="bento-panel div3">
+        <CollapsibleHistory
+          conversations={conversations}
+          activeConversationId={activeConversationId}
+          onSelect={handleSelectConversation}
+          onDelete={handleDeleteConversation}
+          onNewChat={handleNewChat}
+          expanded={historyExpanded}
+          onToggle={() => setHistoryExpanded(!historyExpanded)}
+        />
+      </div>
+
+      {/* div7: Stats Panel - Far left, 1 col, spans 3 rows */}
+      <div className="bento-panel div7">
+        <StatsPanel
+          totalMessages={messages.filter((m) => m.role === "user").length}
+          totalApiCalls={messages.filter((m) => m.role === "assistant").length}
+          tokenUsage={messages.reduce(
+            (sum, m) => sum + Math.ceil(m.content.length / 4),
+            0,
+          )}
+          avgResponseTime={avgResponseTime}
+          sessionMessageCount={messages.length}
+          startTime={sessionStart}
+        />
+      </div>
+
+      {/* div5: Chat - Center, 3 cols wide, 3 rows tall */}
+      <div className="bento-panel div5-main">
+        <div className="main-chat-view">
+          <div className="main-chat-header">
+            <svg
+              className="main-chat-header-icon"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+            >
+              <path
+                d="M12 2a7 7 0 017 7c0 3-3 7-7 7s-7-4-7-7a7 7 0 017-7z"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
+              <circle cx="12" cy="14" r="3" />
+              <path
+                d="M6 20v-2M12 22v-2M18 20v-2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
+            </svg>
+            <h3>Conversation</h3>
+            <span className="main-chat-header-badge">
+              {messages.filter((m) => m.role === "assistant").length} replies
+            </span>
           </div>
-        ) : (
-          <div className="messages-list">
-            {messages.map((msg, index) => (
-              <div
-                key={index}
-                className={"message message-" + msg.role}
-                style={{ animationDelay: index * 0.05 + "s" }}
-              >
-                <div className="message-avatar">
-                  {msg.role === "user" ? (
-                    <svg
-                      viewBox="0 0 24 24"
-                      fill="none"
-                      stroke="currentColor"
-                      strokeWidth="2"
-                    >
-                      <path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2" />
-                      <circle cx="12" cy="7" r="4" />
-                    </svg>
-                  ) : (
-                    <svg viewBox="0 0 24 24" fill="none">
-                      <path
-                        d="M12 2L2 7L12 12L22 7L12 2Z"
-                        fill="currentColor"
-                        fillOpacity="0.9"
-                      />
-                      <path
-                        d="M2 17L12 22L22 17M2 12L12 17L22 12"
-                        stroke="currentColor"
-                        strokeWidth="2"
-                      />
-                    </svg>
-                  )}
-                </div>
-                <div className="message-content">
-                  <div className="message-header">
-                    <span className="message-role">
-                      {msg.role === "user" ? "You" : "Gemini"}
-                    </span>
-                    <span className="message-time">
-                      {new Date(msg.timestamp).toLocaleTimeString([], {
-                        hour: "2-digit",
-                        minute: "2-digit",
-                      })}
-                    </span>
-                  </div>
-                  <div className="message-text">{msg.content}</div>
-                </div>
-              </div>
-            ))}
-            {isTyping && (
-              <div className="message message-assistant typing-indicator">
-                <div className="message-avatar">
-                  <svg viewBox="0 0 24 24" fill="none">
-                    <path
-                      d="M12 2L2 7L12 12L22 7L12 2Z"
-                      fill="currentColor"
-                      fillOpacity="0.9"
-                    />
-                    <path
-                      d="M2 17L12 22L22 17M2 12L12 17L22 12"
-                      stroke="currentColor"
-                      strokeWidth="2"
-                    />
-                  </svg>
-                </div>
-                <div className="message-content">
-                  <div className="typing-dots">
-                    <span></span>
-                    <span></span>
-                    <span></span>
-                  </div>
-                </div>
-              </div>
-            )}
-            <div ref={messagesEndRef} />
+
+          <div className="main-chat-messages">
+            <MessageList
+              messages={messages}
+              isTyping={isTyping}
+              messagesEndRef={messagesEndRef}
+            />
           </div>
-        )}
-      </main>
 
-      <footer className="input-container">
-        <form onSubmit={handleSubmit} className="input-form">
-          <input
-            ref={inputRef}
-            type="text"
-            value={input}
-            onChange={(e) => setInput(e.target.value)}
-            placeholder="Message Gemini..."
-            className="chat-input"
-            disabled={loading}
-          />
-          <button
-            type="submit"
-            disabled={!input.trim() || loading}
-            className="send-button"
-          >
-            {loading ? (
-              <svg
-                className="spinner"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2"
-              >
-                <circle cx="12" cy="12" r="10" opacity="0.25" />
-                <path d="M12 2a10 10 0 0110 10" strokeLinecap="round" />
-              </svg>
-            ) : (
-              <svg
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2"
-              >
-                <line x1="22" y1="2" x2="11" y2="13" />
-                <polygon points="22 2 15 22 11 13 2 9 22 2" />
-              </svg>
-            )}
-          </button>
-        </form>
-        <p className="input-footer">
-          Gemini can make mistakes. Check important info.
-        </p>
-      </footer>
+          <div className="main-chat-input-wrapper">
+            <ChatInput
+              onSubmit={handleSubmit}
+              disabled={loading}
+              inputRef={inputRef}
+            />
+          </div>
+        </div>
+      </div>
 
-      <Sidebar
-        conversations={conversations}
-        activeConversationId={activeConversationId}
-        onSelectConversation={handleSelectConversation}
-        onNewChat={handleNewChat}
-        onDeleteConversation={handleDeleteConversation}
-        isOpen={sidebarOpen}
-        onToggle={() => setSidebarOpen(!sidebarOpen)}
-      />
+      {/* div4: Model/Stats Bar - Bottom, 4 cols wide */}
+      <div className="bento-panel div4">
+        <ModelBar
+          modelName={settings.model}
+          temperature={settings.temperature}
+          mode={settings.model === "auto" ? "auto" : "manual"}
+          messageCount={messages.length}
+        />
+      </div>
+
       <SettingsModal
         key={settingsModalOpen ? "open" : "closed"}
         isOpen={settingsModalOpen}
