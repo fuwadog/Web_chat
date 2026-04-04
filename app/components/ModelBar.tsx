@@ -18,6 +18,9 @@ export default function ModelBar({
       auto: "Auto Select",
       "gemini-2.0-flash": "Gemini 2.0 Flash",
       "gemini-2.5-flash": "Gemini 2.5 Flash",
+      "gemini-2.5-flash-lite": "Gemini 2.5 Flash Lite",
+      "gemini-3-flash": "Gemini 3 Flash",
+      "gemini-3.1-flash-lite": "Gemini 3.1 Flash Lite",
     };
     return (
       modelMap[name] ||

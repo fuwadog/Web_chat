@@ -21,6 +21,44 @@ export function clearSessionApiKey(): void {
   sessionStorage.removeItem(USER_API_KEY);
 }
 
+// Session timeout & security helpers
+const SESSION_LAST_ACTIVE_KEY = 'gemini_chat_last_active';
+const SESSION_EXPIRY_MS = 3_600_000; // 1 hour
+
+export function updateLastActive(): void {
+  if (typeof window === 'undefined') return;
+  sessionStorage.setItem(SESSION_LAST_ACTIVE_KEY, Date.now().toString());
+}
+
+export function checkSessionExpiry(): boolean {
+  if (typeof window === 'undefined') return false;
+  const now = Date.now();
+  const lastActive = sessionStorage.getItem(SESSION_LAST_ACTIVE_KEY);
+  if (!lastActive) return false;
+  try {
+    return now - parseInt(lastActive, 10) > SESSION_EXPIRY_MS;
+  } catch {
+    return false;
+  }
+}
+
+export function clearSessionData(): void {
+  if (typeof window === 'undefined') return;
+  sessionStorage.removeItem(USER_API_KEY);
+  sessionStorage.removeItem(SESSION_LAST_ACTIVE_KEY);
+}
+
+export function maskApiKey(apiKey: string): string {
+  if (!apiKey || apiKey.length <= 4) return '****';
+  return '*'.repeat(apiKey.length - 4) + apiKey.slice(-4);
+}
+
+export function isApiKeySet(): boolean {
+  if (typeof window === 'undefined') return false;
+  const key = sessionStorage.getItem(USER_API_KEY);
+  return !!key;
+}
+
 // Conversations
 export function getConversations(): Conversation[] {
   if (typeof window === 'undefined') return [];

@@ -2,6 +2,8 @@ export interface Message {
   role: 'user' | 'assistant';
   content: string;
   timestamp: string;
+  isError?: boolean;
+  errorCode?: string;
 }
 
 export interface Conversation {
@@ -28,4 +30,7 @@ export const AVAILABLE_MODELS = [
   { id: 'auto', name: 'Auto (pick available)' },
   { id: 'gemini-2.0-flash', name: 'Gemini 2.0 Flash' },
   { id: 'gemini-2.5-flash', name: 'Gemini 2.5 Flash' },
+  { id: 'gemini-2.5-flash-lite', name: 'Gemini 2.5 Flash Lite' },
+  { id: 'gemini-3-flash', name: 'Gemini 3 Flash' },
+  { id: 'gemini-3.1-flash-lite', name: 'Gemini 3.1 Flash Lite' },
 ];

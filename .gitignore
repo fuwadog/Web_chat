@@ -37,6 +37,7 @@ Thumbs.db
 
 # TypeScript build artifacts
 *.tsbuildinfo
+next-env.d.ts
 
 # AI agent skill directories (not part of the app)
 .agents/

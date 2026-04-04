@@ -48,11 +48,12 @@ export default function MessageBubble({ message, index }: MessageBubbleProps) {
         )}
       </div>
       <div className="message-content">
-        <div className="message-bubble">
+        <div className={`message-bubble ${message.isError ? "message-error" : ""}`}>
           <div className="message-header">
             <span className="message-role">
               {message.role === "user" ? "You" : "Gemini"}
             </span>
+            {message.isError && <span className="message-error-badge">Error</span>}
             <span className="message-time">{formattedTime}</span>
           </div>
           <div className="message-text">{message.content}</div>
