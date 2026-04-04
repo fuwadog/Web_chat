@@ -53,6 +53,7 @@ personal/
 css_helper.js
 css_part1.js
 test-api-key.js
+next-env.d.ts
 
 # Empty directories
 div/
