@@ -42,7 +42,9 @@ export default function ChatPage() {
   const [isTyping, setIsTyping] = useState(false);
   const [settingsModalOpen, setSettingsModalOpen] = useState(false);
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
-  const [conversationToDelete, setConversationToDelete] = useState<string | null>(null);
+  const [conversationToDelete, setConversationToDelete] = useState<
+    string | null
+  >(null);
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [activeConversationId, setActiveConversationIdState] = useState<
     string | null
@@ -59,7 +61,7 @@ export default function ChatPage() {
     setShowSplash(false);
   }, []);
 
-  // Check sessionStorage on mount to determine if splash should show
+  // Check sessionStorage on mount to determine if splash should show. test
   useEffect(() => {
     if (!sessionStorage.getItem("splash_shown")) {
       setShowSplash(true);
@@ -102,7 +104,7 @@ export default function ChatPage() {
   useEffect(() => {
     // Clean up old conversations before loading
     cleanupOldConversations();
-    
+
     const savedSettings = getSettings();
     setSettings(savedSettings);
     const sessionKey = getSessionApiKey();
@@ -349,13 +351,10 @@ export default function ChatPage() {
     [conversations, activeConversationId, messages],
   );
 
-  const handleDeleteConversation = useCallback(
-    (id: string) => {
-      setConversationToDelete(id);
-      setDeleteConfirmOpen(true);
-    },
-    [],
-  );
+  const handleDeleteConversation = useCallback((id: string) => {
+    setConversationToDelete(id);
+    setDeleteConfirmOpen(true);
+  }, []);
 
   const confirmDelete = useCallback(() => {
     if (!conversationToDelete) return;
@@ -588,7 +587,10 @@ export default function ChatPage() {
 
         <DeleteConfirmModal
           isOpen={deleteConfirmOpen}
-          conversationTitle={conversations.find(c => c.id === conversationToDelete)?.title || "this conversation"}
+          conversationTitle={
+            conversations.find((c) => c.id === conversationToDelete)?.title ||
+            "this conversation"
+          }
           onConfirm={confirmDelete}
           onCancel={cancelDelete}
         />
