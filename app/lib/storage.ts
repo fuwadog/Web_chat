@@ -98,6 +98,12 @@ export function deleteConversation(id: string): void {
   saveConversations(conversations);
 }
 
+export function deleteAllConversations(): void {
+  if (typeof window === 'undefined') return;
+  localStorage.removeItem(CONVERSATIONS_KEY);
+  localStorage.removeItem(ACTIVE_CONVERSATION_KEY);
+}
+
 export function createConversation(): Conversation {
   const now = new Date().toISOString();
   return {

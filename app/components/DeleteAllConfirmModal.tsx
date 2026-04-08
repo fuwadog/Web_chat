@@ -1,25 +1,25 @@
 "use client";
 
-interface DeleteConfirmModalProps {
+import { useState } from "react";
+
+interface DeleteAllConfirmModalProps {
   isOpen: boolean;
-  conversationTitle: string;
   onConfirm: () => void;
   onCancel: () => void;
 }
 
-export default function DeleteConfirmModal({
+export default function DeleteAllConfirmModal({
   isOpen,
-  conversationTitle,
   onConfirm,
   onCancel,
-}: DeleteConfirmModalProps) {
+}: DeleteAllConfirmModalProps) {
   if (!isOpen) return null;
 
   return (
     <div className="modal-overlay" onClick={onCancel}>
       <div className="modal delete-confirm-modal" onClick={(e) => e.stopPropagation()}>
         <div className="modal-header">
-          <h2>Delete Conversation</h2>
+          <h2>Delete All Chats</h2>
           <button onClick={onCancel} className="modal-close">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
               <line x1="18" y1="6" x2="6" y2="18" />
@@ -28,7 +28,7 @@ export default function DeleteConfirmModal({
           </button>
         </div>
         <div className="modal-content">
-          <div className="delete-confirm-icon">
+          <div className="delete-all-icon">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
               <path d="M3 6h18M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2" />
               <line x1="10" y1="11" x2="10" y2="17" />
@@ -36,16 +36,18 @@ export default function DeleteConfirmModal({
             </svg>
           </div>
           <p className="delete-confirm-text">
-            Delete <strong>&quot;{conversationTitle}&quot;</strong>?
+            Delete all chat history?
           </p>
-          <p className="delete-confirm-warning">This action cannot be undone.</p>
+          <p className="delete-confirm-warning">
+            This action cannot be undone. All conversations will be permanently deleted.
+          </p>
         </div>
         <div className="modal-footer">
           <button className="modal-button modal-button-secondary" onClick={onCancel}>
             Cancel
           </button>
           <button className="modal-button modal-button-danger" onClick={onConfirm}>
-            Delete
+            Delete All
           </button>
         </div>
       </div>

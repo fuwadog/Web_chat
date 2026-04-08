@@ -2042,6 +2042,33 @@ body {
   height: 14px;
 }
 
+.history-delete-all-btn {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  width: calc(100% - 1.5rem);
+  margin: 0 0.75rem 0.5rem;
+  padding: 0.625rem 0.75rem;
+  border: 1.5px dashed color-mix(in srgb, var(--red) 40%, var(--border-color));
+  border-radius: 10px;
+  background: transparent;
+  color: var(--error);
+  cursor: pointer;
+  font-size: 0.8125rem;
+  font-weight: 500;
+  transition: all 0.2s ease;
+}
+
+.history-delete-all-btn:hover {
+  border-color: var(--red);
+  background: color-mix(in srgb, var(--red) 12%, transparent);
+}
+
+.history-delete-all-btn svg {
+  width: 14px;
+  height: 14px;
+}
+
 .history-list {
   flex: 1;
   overflow-y: auto;

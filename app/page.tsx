@@ -2,14 +2,15 @@
 
 import { useState, useRef, useEffect, useCallback } from "react";
 import "./globals.css";
-import SplashLogo from "./components/SplashLogo";
-import SettingsModal from "./components/SettingsModal";
-import DeleteConfirmModal from "./components/DeleteConfirmModal";
-import MessageList from "./components/chat/MessageList";
-import ChatInput from "./components/chat/ChatInput";
-import CollapsibleHistory from "./components/CollapsibleHistory";
-import StatsPanel from "./components/StatsPanel";
-import ModelBar from "./components/ModelBar";
+  import SplashLogo from "./components/SplashLogo";
+  import SettingsModal from "./components/SettingsModal";
+  import DeleteConfirmModal from "./components/DeleteConfirmModal";
+  import DeleteAllConfirmModal from "./components/DeleteAllConfirmModal";
+  import MessageList from "./components/chat/MessageList";
+  import ChatInput from "./components/chat/ChatInput";
+  import CollapsibleHistory from "./components/CollapsibleHistory";
+  import StatsPanel from "./components/StatsPanel";
+  import ModelBar from "./components/ModelBar";
 import {
   Message,
   Conversation,
@@ -31,6 +32,7 @@ import {
   checkSessionExpiry,
   clearSessionData,
   cleanupOldConversations,
+  deleteAllConversations,
 } from "./lib/storage";
 
 const API_KEY_STORAGE_KEY = "gemini_api_key";
@@ -45,6 +47,7 @@ export default function ChatPage() {
   const [conversationToDelete, setConversationToDelete] = useState<
     string | null
   >(null);
+  const [deleteAllConfirmOpen, setDeleteAllConfirmOpen] = useState(false);
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [activeConversationId, setActiveConversationIdState] = useState<
     string | null
@@ -380,6 +383,22 @@ export default function ChatPage() {
     setConversationToDelete(null);
   }, []);
 
+  const handleDeleteAll = useCallback(() => {
+    setDeleteAllConfirmOpen(true);
+  }, []);
+
+  const confirmDeleteAll = useCallback(() => {
+    deleteAllConversations();
+    setConversations([]);
+    setActiveConversationIdState(null);
+    setMessages([]);
+    setDeleteAllConfirmOpen(false);
+  }, []);
+
+  const cancelDeleteAll = useCallback(() => {
+    setDeleteAllConfirmOpen(false);
+  }, []);
+
   const handleSettingsSave = useCallback(
     (newSettings: AppSettings, newApiKey: string) => {
       setSettings(newSettings);
@@ -497,6 +516,7 @@ export default function ChatPage() {
             onSelect={handleSelectConversation}
             onDelete={handleDeleteConversation}
             onNewChat={handleNewChat}
+            onDeleteAll={handleDeleteAll}
             expanded={historyExpanded}
             onToggle={() => setHistoryExpanded(!historyExpanded)}
           />
@@ -593,6 +613,12 @@ export default function ChatPage() {
           }
           onConfirm={confirmDelete}
           onCancel={cancelDelete}
+        />
+
+        <DeleteAllConfirmModal
+          isOpen={deleteAllConfirmOpen}
+          onConfirm={confirmDeleteAll}
+          onCancel={cancelDeleteAll}
         />
       </div>
       {showSplash && <SplashLogo onComplete={handleSplashComplete} />}

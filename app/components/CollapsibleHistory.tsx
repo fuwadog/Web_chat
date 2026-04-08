@@ -8,6 +8,7 @@ interface CollapsibleHistoryProps {
   onSelect: (id: string) => void;
   onDelete: (id: string) => void;
   onNewChat: () => void;
+  onDeleteAll: () => void;
   expanded: boolean;
   onToggle: () => void;
 }
@@ -18,6 +19,7 @@ export default function CollapsibleHistory({
   onSelect,
   onDelete,
   onNewChat,
+  onDeleteAll,
   expanded,
   onToggle,
 }: CollapsibleHistoryProps) {
@@ -101,6 +103,24 @@ export default function CollapsibleHistory({
             </svg>
             <span>New Chat</span>
           </button>
+
+          {conversations.length > 0 && (
+            <button className="history-delete-all-btn" onClick={onDeleteAll}>
+              <svg
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+              >
+                <path
+                  d="M3 6h18M8 6V4a2 2 0 012-2h4a2 2 0 012 2v2m3 0v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6h14z"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                />
+              </svg>
+              <span>Delete All</span>
+            </button>
+          )}
 
           <div className="history-list">
             {conversations.length === 0 ? (
