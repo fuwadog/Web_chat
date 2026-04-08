@@ -4,6 +4,7 @@ import { useState, useRef, useEffect, useCallback } from "react";
 import "./globals.css";
 import SplashLogo from "./components/SplashLogo";
 import SettingsModal from "./components/SettingsModal";
+import DeleteConfirmModal from "./components/DeleteConfirmModal";
 import MessageList from "./components/chat/MessageList";
 import ChatInput from "./components/chat/ChatInput";
 import CollapsibleHistory from "./components/CollapsibleHistory";
@@ -40,6 +41,8 @@ export default function ChatPage() {
   const [loading, setLoading] = useState(false);
   const [isTyping, setIsTyping] = useState(false);
   const [settingsModalOpen, setSettingsModalOpen] = useState(false);
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
+  const [conversationToDelete, setConversationToDelete] = useState<string | null>(null);
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [activeConversationId, setActiveConversationIdState] = useState<
     string | null
@@ -348,22 +351,35 @@ export default function ChatPage() {
 
   const handleDeleteConversation = useCallback(
     (id: string) => {
-      if (!confirm("Delete this conversation?")) return;
-      const newConvs = conversations.filter((c) => c.id !== id);
-      setConversations(newConvs);
-      saveConversations(newConvs);
-      if (activeConversationId === id) {
-        if (newConvs.length > 0) {
-          setActiveConversationIdState(newConvs[0].id);
-          setMessages(newConvs[0].messages);
-        } else {
-          setActiveConversationIdState(null);
-          setMessages([]);
-        }
-      }
+      setConversationToDelete(id);
+      setDeleteConfirmOpen(true);
     },
-    [conversations, activeConversationId],
+    [],
   );
+
+  const confirmDelete = useCallback(() => {
+    if (!conversationToDelete) return;
+    const id = conversationToDelete;
+    const newConvs = conversations.filter((c) => c.id !== id);
+    setConversations(newConvs);
+    saveConversations(newConvs);
+    if (activeConversationId === id) {
+      if (newConvs.length > 0) {
+        setActiveConversationIdState(newConvs[0].id);
+        setMessages(newConvs[0].messages);
+      } else {
+        setActiveConversationIdState(null);
+        setMessages([]);
+      }
+    }
+    setDeleteConfirmOpen(false);
+    setConversationToDelete(null);
+  }, [conversationToDelete, conversations, activeConversationId]);
+
+  const cancelDelete = useCallback(() => {
+    setDeleteConfirmOpen(false);
+    setConversationToDelete(null);
+  }, []);
 
   const handleSettingsSave = useCallback(
     (newSettings: AppSettings, newApiKey: string) => {
@@ -568,6 +584,13 @@ export default function ChatPage() {
           settings={settings}
           apiKey={apiKey}
           onSave={handleSettingsSave}
+        />
+
+        <DeleteConfirmModal
+          isOpen={deleteConfirmOpen}
+          conversationTitle={conversations.find(c => c.id === conversationToDelete)?.title || "this conversation"}
+          onConfirm={confirmDelete}
+          onCancel={cancelDelete}
         />
       </div>
       {showSplash && <SplashLogo onComplete={handleSplashComplete} />}
