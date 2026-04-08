@@ -29,6 +29,7 @@ import {
   updateLastActive,
   checkSessionExpiry,
   clearSessionData,
+  cleanupOldConversations,
 } from "./lib/storage";
 
 const API_KEY_STORAGE_KEY = "gemini_api_key";
@@ -96,6 +97,9 @@ export default function ChatPage() {
 
   // Load data on mount
   useEffect(() => {
+    // Clean up old conversations before loading
+    cleanupOldConversations();
+    
     const savedSettings = getSettings();
     setSettings(savedSettings);
     const sessionKey = getSessionApiKey();

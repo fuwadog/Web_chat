@@ -4,6 +4,8 @@ const CONVERSATIONS_KEY = 'gemini_chat_conversations';
 const SETTINGS_KEY = 'gemini_chat_settings';
 const ACTIVE_CONVERSATION_KEY = 'gemini_chat_active_conversation';
 const USER_API_KEY = 'User_API';
+const AUTO_CLEANUP_KEY = 'gemini_chat_last_cleanup';
+const DEFAULT_MAX_AGE_DAYS = 10;
 
 // Session-based API key storage (auto-clears on tab close)
 export function getSessionApiKey(): string {
@@ -157,6 +159,42 @@ export function getSettings(): AppSettings {
 }
 
 export function saveSettings(settings: AppSettings): void {
-  if (typeof window === 'undefined') return;
-  localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
+   if (typeof window === 'undefined') return;
+   localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
+ }
+
+// Cleanup old conversations
+export function cleanupOldConversations(maxAgeDays: number = DEFAULT_MAX_AGE_DAYS): { removed: number; remaining: number } {
+    if (typeof window === 'undefined') return { removed: 0, remaining: 0 };
+
+    try {
+      const now = Date.now();
+      const conversations = getConversations();
+      const maxAgeMs = maxAgeDays * 24 * 60 * 60 * 1000;
+      const cutoffTime = now - maxAgeMs;
+      
+      const filteredConversations = conversations.filter(conv => {
+        // If updatedAt is missing, treat as old (should be removed)
+        if (!conv.updatedAt) return false;
+        try {
+          return new Date(conv.updatedAt).getTime() > cutoffTime;
+        } catch {
+          // Invalid date format, remove it
+          return false;
+        }
+      });
+      
+      const removedCount = conversations.length - filteredConversations.length;
+      
+      if (removedCount > 0) {
+        saveConversations(filteredConversations);
+      }
+      
+      return {
+        removed: removedCount,
+        remaining: filteredConversations.length
+      };
+    } catch {
+      return { removed: 0, remaining: 0 };
+    }
 }
