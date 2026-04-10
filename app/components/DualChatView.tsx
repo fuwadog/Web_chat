@@ -77,7 +77,45 @@ export default function DualChatView({
           throw new Error("Failed to get response");
         }
 
-        const data = await response.json();
+        if (!response.body) {
+          throw new Error("Empty response body");
+        }
+
+        const reader = response.body.getReader();
+        const decoder = new TextDecoder();
+        let buffer = "";
+        let parsedData: { response?: string; model?: string; rateLimit?: boolean } | null = null;
+
+        try {
+          while (true) {
+            const { done, value } = await reader.read();
+
+            if (done) break;
+
+            buffer += decoder.decode(value, { stream: true });
+            const lines = buffer.split("\n");
+            buffer = lines.pop() || "";
+
+            for (const line of lines) {
+              const trimmed = line.trim();
+              if (trimmed.startsWith("data: ")) {
+                const jsonStr = trimmed.slice(6).trim();
+                if (jsonStr === "[DONE]") continue;
+                try {
+                  parsedData = JSON.parse(jsonStr);
+                } catch {
+                  console.error("Failed to parse SSE JSON:", jsonStr);
+                }
+              }
+            }
+          }
+        } finally {
+          reader.releaseLock();
+        }
+
+        if (!parsedData?.response) {
+          throw new Error("No valid response data received");
+        }
 
         setTimeout(() => {
           setChat((prev) => ({
@@ -88,7 +126,7 @@ export default function DualChatView({
               ...prev.messages,
               {
                 role: "assistant",
-                content: data.response,
+                content: parsedData!.response!,
                 timestamp: new Date().toISOString(),
               },
             ],

@@ -246,11 +246,22 @@ export default function ChatPage() {
           }),
         });
 
-        const data = await response.json();
-
         if (!response.ok) {
-          const errorCode = data.code || "UNKNOWN_ERROR";
-          const errorMessage = data.error || "An error occurred";
+          let errorCode = "UNKNOWN_ERROR";
+          let errorMessage = "An error occurred";
+
+          try {
+            const reader = response.body?.getReader();
+            if (reader) {
+              const { value } = await reader.read();
+              const text = new TextDecoder().decode(value);
+              const parsed = JSON.parse(text);
+              errorCode = parsed.code || errorCode;
+              errorMessage = parsed.error || errorMessage;
+            }
+          } catch {
+            // Ignore parse errors in error response body
+          }
 
           setIsTyping(false);
           setMessages((prev) => [
@@ -275,8 +286,58 @@ export default function ChatPage() {
           return;
         }
 
-        if (data.model && settings.model === "auto" && data.model !== "auto") {
-          const newSettings = { ...settings, model: data.model };
+        const reader = response.body?.getReader();
+        if (!reader) {
+          throw new Error("Unable to read response stream");
+        }
+
+        const decoder = new TextDecoder();
+        let buffer = "";
+        let parsedResponse = "";
+        let parsedModel: string | undefined;
+        let parsedRateLimit: boolean | undefined;
+
+        try {
+          while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+
+            buffer += decoder.decode(value, { stream: true });
+            const lines = buffer.split("\n");
+            buffer = lines.pop() || "";
+
+            for (const line of lines) {
+              if (line.startsWith("data: ")) {
+                const jsonStr = line.slice(6).trim();
+                if (jsonStr === "") continue;
+
+                try {
+                  const data = JSON.parse(jsonStr);
+                  if (data.response) {
+                    parsedResponse = data.response;
+                  }
+                  if (data.model) {
+                    parsedModel = data.model;
+                  }
+                  if (typeof data.rateLimit === "boolean") {
+                    parsedRateLimit = data.rateLimit;
+                  }
+                } catch {
+                  // Skip malformed SSE lines
+                }
+              }
+            }
+          }
+        } finally {
+          reader.releaseLock();
+        }
+
+        if (!parsedResponse) {
+          throw new Error("Empty response from server");
+        }
+
+        if (parsedModel && settings.model === "auto" && parsedModel !== "auto") {
+          const newSettings = { ...settings, model: parsedModel };
           setSettings(newSettings);
           saveSettings(newSettings);
         }
@@ -288,7 +349,7 @@ export default function ChatPage() {
             {
               id: crypto.randomUUID(),
               role: "assistant",
-              content: data.response,
+              content: parsedResponse,
               timestamp: new Date().toISOString(),
             },
           ]);
