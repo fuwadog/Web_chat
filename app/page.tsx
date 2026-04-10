@@ -1,16 +1,13 @@
 "use client";
 
-import { useState, useRef, useEffect, useCallback } from "react";
+import { useState, useRef, useEffect, useCallback, useMemo } from "react";
+import dynamic from "next/dynamic";
 import "./globals.css";
-  import SplashLogo from "./components/SplashLogo";
-  import SettingsModal from "./components/SettingsModal";
-  import DeleteConfirmModal from "./components/DeleteConfirmModal";
-  import DeleteAllConfirmModal from "./components/DeleteAllConfirmModal";
-  import MessageList from "./components/chat/MessageList";
-  import ChatInput from "./components/chat/ChatInput";
-  import CollapsibleHistory from "./components/CollapsibleHistory";
-  import StatsPanel from "./components/StatsPanel";
-  import ModelBar from "./components/ModelBar";
+import SplashLogo from "./components/SplashLogo";
+import MessageList from "./components/chat/MessageList";
+import ChatInput from "./components/chat/ChatInput";
+import CollapsibleHistory from "./components/CollapsibleHistory";
+import ModelBar from "./components/ModelBar";
 import {
   Message,
   Conversation,
@@ -34,6 +31,11 @@ import {
   cleanupOldConversations,
   deleteAllConversations,
 } from "./lib/storage";
+
+const SettingsModal = dynamic(() => import("./components/SettingsModal"), { ssr: false });
+const DeleteConfirmModal = dynamic(() => import("./components/DeleteConfirmModal"), { ssr: false });
+const DeleteAllConfirmModal = dynamic(() => import("./components/DeleteAllConfirmModal"), { ssr: false });
+const StatsPanel = dynamic(() => import("./components/StatsPanel"), { ssr: false });
 
 const API_KEY_STORAGE_KEY = "gemini_api_key";
 
@@ -105,7 +107,6 @@ export default function ChatPage() {
 
   // Load data on mount
   useEffect(() => {
-    // Clean up old conversations before loading
     cleanupOldConversations();
 
     const savedSettings = getSettings();
@@ -113,15 +114,24 @@ export default function ChatPage() {
     const sessionKey = getSessionApiKey();
     if (sessionKey) setApiKey(sessionKey);
     const savedConvs = getConversations();
-    setConversations(savedConvs);
+    
+    const convsWithIds = savedConvs.map(conv => ({
+      ...conv,
+      messages: conv.messages.map(msg => ({
+        ...msg,
+        id: msg.id || crypto.randomUUID(),
+      })),
+    }));
+    setConversations(convsWithIds);
+    
     const activeId = getActiveConversationId();
-    if (activeId && savedConvs.find((c) => c.id === activeId)) {
+    if (activeId && convsWithIds.find((c) => c.id === activeId)) {
       setActiveConversationIdState(activeId);
-      const active = savedConvs.find((c) => c.id === activeId);
+      const active = convsWithIds.find((c) => c.id === activeId);
       if (active) setMessages(active.messages);
-    } else if (savedConvs.length > 0) {
-      setActiveConversationIdState(savedConvs[0].id);
-      setMessages(savedConvs[0].messages);
+    } else if (convsWithIds.length > 0) {
+      setActiveConversationIdState(convsWithIds[0].id);
+      setMessages(convsWithIds[0].messages);
     }
   }, []);
 
@@ -214,6 +224,7 @@ export default function ChatPage() {
       }
 
       const userMessage: Message = {
+        id: crypto.randomUUID(),
         role: "user",
         content: text.trim(),
         timestamp: new Date().toISOString(),
@@ -245,6 +256,7 @@ export default function ChatPage() {
           setMessages((prev) => [
             ...prev,
             {
+              id: crypto.randomUUID(),
               role: "assistant",
               content: errorMessage,
               timestamp: new Date().toISOString(),
@@ -274,6 +286,7 @@ export default function ChatPage() {
           setMessages((prev) => [
             ...prev,
             {
+              id: crypto.randomUUID(),
               role: "assistant",
               content: data.response,
               timestamp: new Date().toISOString(),
@@ -285,6 +298,7 @@ export default function ChatPage() {
         setMessages((prev) => [
           ...prev,
           {
+            id: crypto.randomUUID(),
             role: "assistant",
             content:
               error instanceof Error ? error.message : "An error occurred",
@@ -409,8 +423,19 @@ export default function ChatPage() {
     [saveApiKey, removeApiKey],
   );
 
-  // Calculate response time (average)
-  const avgResponseTime = 350; // Placeholder, would be calculated from actual timings
+  const statsData = useMemo(() => {
+    const userMessages = messages.filter((m) => m.role === "user");
+    const assistantMessages = messages.filter((m) => m.role === "assistant");
+    const tokenUsage = messages.reduce(
+      (sum, m) => sum + Math.ceil(m.content.length / 4),
+      0,
+    );
+    return {
+      userMessageCount: userMessages.length,
+      assistantMessageCount: assistantMessages.length,
+      tokenUsage,
+    };
+  }, [messages]);
 
   return (
     <>
@@ -525,15 +550,10 @@ export default function ChatPage() {
         {/* div7: Stats Panel - Far left, 1 col, spans 3 rows */}
         <div className="bento-panel div7">
           <StatsPanel
-            totalMessages={messages.filter((m) => m.role === "user").length}
-            totalApiCalls={
-              messages.filter((m) => m.role === "assistant").length
-            }
-            tokenUsage={messages.reduce(
-              (sum, m) => sum + Math.ceil(m.content.length / 4),
-              0,
-            )}
-            avgResponseTime={avgResponseTime}
+            totalMessages={statsData.userMessageCount}
+            totalApiCalls={statsData.assistantMessageCount}
+            tokenUsage={statsData.tokenUsage}
+            avgResponseTime={350}
             sessionMessageCount={messages.length}
             startTime={sessionStart}
           />

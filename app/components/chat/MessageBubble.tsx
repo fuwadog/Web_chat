@@ -1,26 +1,20 @@
 "use client";
 
+import { memo } from "react";
 import { Message } from "../../types/chat";
 
 interface MessageBubbleProps {
   message: Message;
-  index: number;
 }
 
-/**
- * MessageBubble - Renders a single message bubble with avatar, role, timestamp, and text.
- */
-export default function MessageBubble({ message, index }: MessageBubbleProps) {
+const MessageBubble = memo(function MessageBubble({ message }: MessageBubbleProps) {
   const formattedTime = new Date(message.timestamp).toLocaleTimeString([], {
     hour: "2-digit",
     minute: "2-digit",
   });
 
   return (
-    <div
-      className={`message message-${message.role}`}
-      style={{ animationDelay: `${index * 0.05}s` }}
-    >
+    <div className={`message message-${message.role}`}>
       <div className="message-avatar">
         {message.role === "user" ? (
           <svg
@@ -61,4 +55,6 @@ export default function MessageBubble({ message, index }: MessageBubbleProps) {
       </div>
     </div>
   );
-}
+});
+
+export default MessageBubble;

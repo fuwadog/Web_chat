@@ -1,5 +1,6 @@
 'use client';
 
+import { memo } from "react";
 import { Conversation } from "../types/chat";
 
 interface SidebarProps {
@@ -12,7 +13,7 @@ interface SidebarProps {
   onToggle: () => void;
 }
 
-export default function Sidebar({
+function Sidebar({
   conversations,
   activeConversationId,
   onSelectConversation,
@@ -82,3 +83,5 @@ export default function Sidebar({
     </>
   );
 }
+
+export default memo(Sidebar);

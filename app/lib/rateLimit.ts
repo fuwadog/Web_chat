@@ -3,10 +3,39 @@ import path from 'path';
 
 const RATE_LIMIT_FILE = path.join(process.cwd(), 'rate-limit.json');
 const DAILY_LIMIT = 25;
+const WINDOW_MS = 60 * 1000;
+const MAX_REQUESTS_PER_WINDOW = 10;
 
 interface RateLimitData {
   count: number;
   lastResetDate: string;
+}
+
+interface SlidingWindowEntry {
+  timestamp: number;
+}
+
+const inMemoryLimit = {
+  window: new Map<string, SlidingWindowEntry[]>(),
+  cleanupInterval: null as ReturnType<typeof setInterval> | null,
+};
+
+function cleanupWindow(): void {
+  const now = Date.now();
+  for (const [key, entries] of inMemoryLimit.window) {
+    const valid = entries.filter(e => now - e.timestamp < WINDOW_MS);
+    if (valid.length === 0) {
+      inMemoryLimit.window.delete(key);
+    } else {
+      inMemoryLimit.window.set(key, valid);
+    }
+  }
+}
+
+inMemoryLimit.cleanupInterval = setInterval(cleanupWindow, WINDOW_MS);
+
+function getTodayDate(): string {
+  return new Date().toLocaleDateString('en-CA');
 }
 
 function getRateLimitData(): RateLimitData {
@@ -21,13 +50,8 @@ function getRateLimitData(): RateLimitData {
   return { count: 0, lastResetDate: getTodayDate() };
 }
 
-function getTodayDate(): string {
-  return new Date().toLocaleDateString('en-CA');
-}
-
 function shouldReset(data: RateLimitData): boolean {
-  const today = getTodayDate();
-  return data.lastResetDate !== today;
+  return data.lastResetDate !== getTodayDate();
 }
 
 function saveRateLimitData(data: RateLimitData): void {
@@ -38,18 +62,24 @@ function saveRateLimitData(data: RateLimitData): void {
   }
 }
 
-export function checkRateLimit(): { allowed: boolean; remaining: number; resetAt: string } {
-  let data = getRateLimitData();
+function getNextMidnight(): string {
+  const now = new Date();
+  const tomorrow = new Date(now);
+  tomorrow.setDate(tomorrow.getDate() + 1);
+  tomorrow.setHours(0, 0, 0, 0);
+  return tomorrow.toISOString();
+}
 
+export function checkRateLimit(): { allowed: boolean; remaining: number; resetAt: string } {
+  const data = getRateLimitData();
   if (shouldReset(data)) {
-    data = { count: 0, lastResetDate: getTodayDate() };
+    const newData = { count: 0, lastResetDate: getTodayDate() };
+    saveRateLimitData(newData);
+    return { allowed: true, remaining: DAILY_LIMIT, resetAt: getNextMidnight() };
   }
 
-  const remaining = DAILY_LIMIT - data.count;
-  const resetAt = getNextMidnight();
-
   if (data.count >= DAILY_LIMIT) {
-    return { allowed: false, remaining: 0, resetAt };
+    return { allowed: false, remaining: 0, resetAt: getNextMidnight() };
   }
 
   data.count += 1;
@@ -58,16 +88,22 @@ export function checkRateLimit(): { allowed: boolean; remaining: number; resetAt
   return {
     allowed: true,
     remaining: DAILY_LIMIT - data.count,
-    resetAt,
+    resetAt: getNextMidnight(),
   };
 }
 
-function getNextMidnight(): string {
-  const now = new Date();
-  const tomorrow = new Date(now);
-  tomorrow.setDate(tomorrow.getDate() + 1);
-  tomorrow.setHours(0, 0, 0, 0);
-  return tomorrow.toISOString();
+export function checkSlidingWindowLimit(key: string): boolean {
+  const now = Date.now();
+  const entries = inMemoryLimit.window.get(key) || [];
+  const validEntries = entries.filter(e => now - e.timestamp < WINDOW_MS);
+
+  if (validEntries.length >= MAX_REQUESTS_PER_WINDOW) {
+    return false;
+  }
+
+  validEntries.push({ timestamp: now });
+  inMemoryLimit.window.set(key, validEntries);
+  return true;
 }
 
 export function getRateLimitStatus(): { remaining: number; limit: number; resetAt: string } {
@@ -83,4 +119,11 @@ export function getRateLimitStatus(): { remaining: number; limit: number; resetA
     limit: DAILY_LIMIT,
     resetAt: getNextMidnight(),
   };
+}
+
+export function cleanupRateLimit(): void {
+  if (inMemoryLimit.cleanupInterval) {
+    clearInterval(inMemoryLimit.cleanupInterval);
+  }
+  inMemoryLimit.window.clear();
 }

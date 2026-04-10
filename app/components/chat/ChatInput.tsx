@@ -1,25 +1,19 @@
 "use client";
 
-import { RefObject, FormEvent } from "react";
+import { memo, RefObject, FormEvent, useCallback } from "react";
 
 interface ChatInputProps {
-  /** Called when the user submits a message */
   onSubmit: (text: string) => void;
-  /** Whether the input should be disabled */
   disabled: boolean;
-  /** Ref for the input element to enable autofocus */
   inputRef: RefObject<HTMLInputElement | null>;
 }
 
-/**
- * ChatInput - Renders the message input field and send button.
- */
-export default function ChatInput({
+function ChatInput({
   onSubmit,
   disabled,
   inputRef,
 }: ChatInputProps) {
-  const handleSubmit = (e: FormEvent<HTMLFormElement>) => {
+  const handleSubmit = useCallback((e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     const input = e.currentTarget.elements.namedItem(
       "chat-input",
@@ -29,7 +23,7 @@ export default function ChatInput({
       onSubmit(value);
       input.value = "";
     }
-  };
+  }, [onSubmit, disabled]);
 
   return (
     <footer className="input-container">
@@ -73,3 +67,5 @@ export default function ChatInput({
     </footer>
   );
 }
+
+export default memo(ChatInput);

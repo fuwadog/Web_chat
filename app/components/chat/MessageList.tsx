@@ -1,6 +1,6 @@
 "use client";
 
-import { RefObject } from "react";
+import { memo, RefObject } from "react";
 import { Message } from "../../types/chat";
 import MessageBubble from "./MessageBubble";
 import TypingIndicator from "./TypingIndicator";
@@ -12,11 +12,7 @@ interface MessageListProps {
   messagesEndRef: RefObject<HTMLDivElement | null>;
 }
 
-/**
- * MessageList - Renders the messages container with scroll ref.
- * Shows EmptyState when no messages, otherwise renders message bubbles + typing indicator.
- */
-export default function MessageList({
+function MessageList({
   messages,
   isTyping,
   messagesEndRef,
@@ -27,8 +23,8 @@ export default function MessageList({
         <EmptyState />
       ) : (
         <>
-          {messages.map((msg, index) => (
-            <MessageBubble key={index} message={msg} index={index} />
+          {messages.map((msg) => (
+            <MessageBubble key={msg.id} message={msg} />
           ))}
           <TypingIndicator visible={isTyping} />
           <div ref={messagesEndRef} />
@@ -37,3 +33,5 @@ export default function MessageList({
     </div>
   );
 }
+
+export default memo(MessageList);
